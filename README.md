@@ -93,11 +93,11 @@ unavailable. Plain memory-mapped reads work regardless, which is all a backup ne
 Nine PWM outputs are enabled, matching exactly the nine pins muxed to alternate
 function 6 (`PA0–PA2`, `PC0–PC4`, `PD7`):
 
-| Zone | Channels | Connector |
-|---|---|---|
-| A | PWM0 ch0, ch1, ch2 | white JST #1 |
-| B | PWM0 ch3, ch4, ch5 | white JST #2 |
-| C | PWM1 ch3, ch4, ch5 | white JST #3 |
+| Zone | Channels | Pins | Connector |
+|---|---|---|---|
+| A | PWM0 ch0, ch1, ch2 | PC.0, PC.1, PC.2 | white JST #1 |
+| B | PWM0 ch3, ch4, ch5 | PC.3, PC.4, PD.7 | white JST #2 |
+| C | PWM1 ch3, ch4, ch5 | PA.2, PA.1, PA.0 | white JST #3 |
 
 The grouping was confirmed by the *live* compare registers under the stock firmware:
 
@@ -136,6 +136,40 @@ zero point, low at compare point). So **duty = CMPDAT / PERIOD**, and
 Which channel within each triplet is **red, green and blue**. That needs LEDs
 physically attached to a JST header; `./rgb.py probe` walks one channel at a time
 for visual identification.
+
+---
+
+## Full pin map
+
+Every pin the firmware muxes away from GPIO, resolved against the NUC126 datasheet
+MFP tables:
+
+| Pin | MFP | Function |
+|---|---|---|
+| PC.0 – PC.4 | 6 | PWM0_CH0 – PWM0_CH4 |
+| PD.7 | 6 | PWM0_CH5 |
+| PA.2, PA.1, PA.0 | 6 | PWM1_CH3, PWM1_CH4, PWM1_CH5 |
+| **PB.1** | 3 | **UART2_TXD** — link to the MStar scaler |
+| **PB.4** | 9 | **UART2_RXD** |
+| PE.6 / PE.7 | 1 | ICE_CLK / ICE_DAT — the SWD pins used here |
+| PF.3 / PF.4 | 1 | XT1_OUT / XT1_IN — external crystal |
+
+Nine PWM pins, matching `POEN = 0x3f` / `0x38` exactly. That PE.6/PE.7 resolve to
+the ICE pins we are physically driving is a useful cross-check on the whole decode.
+
+---
+
+## Talking to the MStar scaler
+
+See **[SCALER.md](SCALER.md)**. Summary: the Nuvoton's only external serial link is
+**UART2 at 38400 8N1 on PB.1/PB.4** — both I2C controllers are implemented but never
+clocked. `uart_bridge.py` can transmit and receive through it (transmit verified by
+watching the FIFO back up at reduced baud), but nothing replies, almost certainly
+because the scaler is unpowered on the Pi's 3.3 V alone.
+
+The firmware also has the **USB device controller** (`0x40060000`) clocked and
+configured but un-enumerated — likely the Mystic Light host interface, and the
+cheapest thing to try next.
 
 ---
 
@@ -186,7 +220,10 @@ probing, but it will **not** drive real LED strips through the Q7xxx transistor 
 | Path | Description |
 |---|---|
 | `rgb.py` | RGB controller — takes over the PWM channels over SWD |
+| `uart_bridge.py` | TX/RX bridge to the MStar scaler over the Nuvoton's UART2 |
 | `scan_periph.py` | Sweeps the peripheral address space for active blocks |
+| `scan_all.py` | Forces all clocks on to reveal every implemented peripheral |
+| `SCALER.md` | Investigation of the scaler link |
 | `openocd/swd.cfg` | Minimal OpenOCD config for the SWD connection |
 | `dumps/` | Flash and SRAM backups (see below) |
 
